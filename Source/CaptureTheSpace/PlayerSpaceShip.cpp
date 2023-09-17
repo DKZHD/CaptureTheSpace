@@ -9,11 +9,16 @@
 #include "GameFramework/SpringArmComponent.h"
 
 //EnhancedInput
+
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 
 
 #include "Bullet.h"
+#include "Collectible.h"
+#include "Components/AudioComponent.h"
+#include "GameFramework/FloatingPawnMovement.h"
+#include "Kismet/GameplayStatics.h"
 
 
 // Sets default values
@@ -29,6 +34,8 @@ APlayerSpaceShip::APlayerSpaceShip()
 	SpaceShipMesh->SetEnableGravity(false);
 	SpaceShipMesh->BodyInstance.bLockXRotation = true;
 	SpaceShipMesh->BodyInstance.bLockYRotation = true;
+
+	PawnMovement = CreateDefaultSubobject<UFloatingPawnMovement>("Pawn Movement Component");
 	
 	MySpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("MySpringArm"));
 	MySpringArm->SetupAttachment(GetRootComponent());
@@ -68,6 +75,7 @@ void APlayerSpaceShip::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	LineTraceFromCamera(); 
 	MovementController(DeltaTime);
 }
 
@@ -83,14 +91,18 @@ void APlayerSpaceShip::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(CameraMovementInput, ETriggerEvent::Triggered, this, &APlayerSpaceShip::CameraMovementFunction);
 		EnhancedInputComponent->BindAction(CameraDistanceInout, ETriggerEvent::Triggered, this, &APlayerSpaceShip::CameraDistanceFunction);
 		EnhancedInputComponent->BindAction(ShootInput, ETriggerEvent::Started, this, &APlayerSpaceShip::ShootFunction);
-		EnhancedInputComponent->BindAction(AimInput, ETriggerEvent::Triggered, this, &APlayerSpaceShip::AimFunction);
+
+		//Beam Input
+		EnhancedInputComponent->BindAction(TractorInput, ETriggerEvent::Triggered, this, &APlayerSpaceShip::TractorBeam);
+		EnhancedInputComponent->BindAction(TractorInput, ETriggerEvent::Started, this, &APlayerSpaceShip::TractorBeamStarted);
+		EnhancedInputComponent->BindAction(TractorInput, ETriggerEvent::Completed, this, &APlayerSpaceShip::TractorBeamReleased);
 	}
 }
 
 void APlayerSpaceShip::MovementFunction(const FInputActionValue& input)
 {
-	SpaceShipMesh->AddImpulse(input.Get<FVector2D>().X * GetActorForwardVector() * 5000000 * GetWorld()->GetDeltaSeconds());
-	SpaceShipMesh->AddAngularImpulseInDegrees(FVector(0,0,input.Get<FVector2D>().Y*110000000));
+	AddMovementInput(GetActorForwardVector(),input.Get<FVector2D>().Y);
+	AddMovementInput(GetActorRightVector(),input.Get<FVector2D>().X);
 }
 
 void APlayerSpaceShip::UpDownMovementFunction(const FInputActionValue& input)
@@ -100,6 +112,7 @@ void APlayerSpaceShip::UpDownMovementFunction(const FInputActionValue& input)
 
 void APlayerSpaceShip::CameraMovementFunction(const FInputActionValue& input)
 {
+	SetActorRotation(FRotator(0.f,GetControlRotation().Yaw,0.f));
 	AddControllerYawInput(input.Get<FVector2D>().X);
 	AddControllerPitchInput(-input.Get<FVector2D>().Y);
 }
@@ -111,25 +124,55 @@ void APlayerSpaceShip::CameraDistanceFunction(const FInputActionValue& input)
 
 void APlayerSpaceShip::ShootFunction(const FInputActionValue& input)
 {
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = this;
-	ABullet* CurrentBullet;
-	CurrentBullet = GetWorld()->SpawnActor<ABullet>(
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.Owner = this;
+		ABullet* CurrentBullet;
+		UGameplayStatics::PlaySound2D(GetWorld(),ShootingSound);
+	for(int i = 0; i<AmountOfShots;i++)
+	{
+		CurrentBullet = GetWorld()->SpawnActor<ABullet>(
 		BulletClass,
-		GetActorLocation()+(GetActorForwardVector()*100),
+		GetActorLocation()+(GetActorForwardVector()*200*i),
 		(AimLocation- GetActorLocation() + (GetActorForwardVector()*100)).GetSafeNormal().Rotation(),
 		SpawnParameters);
-
-	if (HitComponent && !AimLocation.IsNearlyZero())
-	{
-		CurrentBullet->SetUpBulletTarget(HitComponent, AimLocation);
+		if (HitComponent && !AimLocation.IsNearlyZero())
+		{
+			CurrentBullet->BulletSpeed = BulletSpeed;   //Av en eller annen grunn crasher Unreal om jeg skyter for mange bullets -Aslak
+			CurrentBullet->SetUpBulletTarget(HitComponent, AimLocation);
+		}
 	}
+
+
 	
 }
 
-void APlayerSpaceShip::AimFunction(const FInputActionValue& input)
+void APlayerSpaceShip::TractorBeam()
 {
-	LineTraceFromCamera();
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(this);
+	
+	UKismetSystemLibrary::SphereTraceSingle(GetWorld(),MyCamera->GetComponentLocation(),
+		MyCamera->GetComponentLocation() + MyCamera->GetForwardVector() * 10000,100,TraceTypeQuery1,
+		false,ActorsToIgnore,EDrawDebugTrace::None,TractorResult,true);
+
+	if(TractorResult.bBlockingHit)
+	{
+		if(ACollectible* CollectibleActor = Cast<ACollectible>(TractorResult.GetActor()))
+		{
+			CollectibleActor->Mesh->AddImpulse((GetActorLocation()-CollectibleActor->GetActorLocation())*5000*GetWorld()->DeltaTimeSeconds);
+		}
+	}
+}
+
+void APlayerSpaceShip::TractorBeamStarted()
+{
+	SpawnedSound = UGameplayStatics::SpawnSound2D(GetWorld(),BeamSound);
+}
+
+void APlayerSpaceShip::TractorBeamReleased()
+{
+	SpawnedSound->Stop();
+	SpawnedSound->DestroyComponent();
 }
 
 void APlayerSpaceShip::MovementController(float DeltaTime)
