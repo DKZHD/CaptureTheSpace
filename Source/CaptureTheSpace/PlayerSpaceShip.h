@@ -6,6 +6,7 @@
 #include "GameFramework/Pawn.h"
 #include "PlayerSpaceShip.generated.h"
 
+class USoundCue;
 struct FInputActionValue;
 UCLASS()
 class CAPTURETHESPACE_API APlayerSpaceShip : public APawn
@@ -19,6 +20,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MyVariables")
 	UStaticMeshComponent* SpaceShipMesh;
 
+	//Pawn Movement
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TObjectPtr<class UFloatingPawnMovement> PawnMovement;
+	
 	//Camera
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MyVariables")
 	class UCameraComponent* MyCamera;
@@ -62,20 +67,36 @@ public:
 	class UInputAction* ShootInput;
 	// Aim
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-	class UInputAction* AimInput;
+	class UInputAction* TractorInput;
 	//----------------------Input Functions----------------------//
 	void MovementFunction(const FInputActionValue& input);
 	void UpDownMovementFunction(const FInputActionValue& input);
 	void CameraMovementFunction(const FInputActionValue& input);
 	void CameraDistanceFunction(const FInputActionValue& input);
 	void ShootFunction(const FInputActionValue& input);
-	void AimFunction(const FInputActionValue& input);
+	void TractorBeam();
+	void TractorBeamStarted();
+	void TractorBeamReleased();
 	
-	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = "Movement")
-	float MovementSpeed = 50.f;
+	
 	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = "Movement")
 	float RotateSpeed = 0.5f;
 
+	//Essential Variables
+	UPROPERTY(BlueprintReadWrite)
+	int Score = 0;
+	UPROPERTY(BlueprintReadWrite)
+	int Health = 5;
+
+	//Upgradeable Variables
+	UPROPERTY(BlueprintReadWrite)
+	float BulletSpeed = 10000.f;
+	UPROPERTY(BlueprintReadWrite)
+	int AmountOfShots = 1;
+	UPROPERTY(BlueprintReadWrite)
+	int GoldIncrease = 1;
+	
+	
 	//Camera Variables
 	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = "CameraVar")
 	float CameraDistanceMin = 300.f;
@@ -86,6 +107,13 @@ public:
 
 	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = "ShootingVar")
 	float CameraLineTraceDistance = 10000;
+	
+	//Sounds
+	UPROPERTY(EditAnywhere)
+	USoundBase* ShootingSound;
+	UAudioComponent* SpawnedSound;
+	UPROPERTY(EditAnywhere)
+	USoundBase* BeamSound;
 
 	//What Type of bullet to shoot
 	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = "ShootingVar")
@@ -106,4 +134,9 @@ private:
 	FVector AimLocation;
 	class UPrimitiveComponent* HitComponent;
 	FHitResult HitResult;
+
+	//Tractor Beam Variables
+	FHitResult TractorResult;
+
+	
 };
